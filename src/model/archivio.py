@@ -73,10 +73,15 @@ class GestoreBustePaga:
         return righe
 
     def calcola_proiezione_fine_anno(
-        self, anno: int, retribuzione_mensile_residua: float | None = None
+        self,
+        anno: int,
+        retribuzione_mensile_residua: float | None = None,
+        comune_residenza: str | None = None,
     ) -> RisultatoProiezione:
         return CalcolatoreFiscale.calcola_proiezione_fine_anno(
-            self.get_buste_anno(anno), retribuzione_mensile_residua
+            self.get_buste_anno(anno),
+            retribuzione_mensile_residua,
+            comune_residenza=comune_residenza,
         )
 
     def salva_su_file(self, percorso: Path) -> None:

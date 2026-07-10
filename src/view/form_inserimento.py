@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..model import config
 from ..model.busta_paga import BustaPaga
 from ..model.enums import LivelloCCNL, Mese
 
@@ -50,6 +51,10 @@ class FormInserimentoBustaPaga(QWidget):
         for livello in LivelloCCNL:
             self.combo_livello.addItem(livello.value, userData=livello)
 
+        self.combo_comune = QComboBox(self)
+        for comune in config.get_comuni_disponibili():
+            self.combo_comune.addItem(comune, userData=comune)
+
         self.spin_totale_elementi = self._crea_spin_valuta()
         self.spin_ore_ordinarie = self._crea_spin_ore()
         self.spin_straordinari = self._crea_spin_valuta()
@@ -65,6 +70,7 @@ class FormInserimentoBustaPaga(QWidget):
         form_layout.addRow("Mese", self.combo_mese)
         form_layout.addRow("Anno", self.spin_anno)
         form_layout.addRow("Livello CCNL", self.combo_livello)
+        form_layout.addRow("Comune di residenza fiscale", self.combo_comune)
         form_layout.addRow("Totale elementi retributivi (€)", self.spin_totale_elementi)
         form_layout.addRow("Ore ordinarie", self.spin_ore_ordinarie)
         form_layout.addRow("Straordinari (€)", self.spin_straordinari)
@@ -116,6 +122,7 @@ class FormInserimentoBustaPaga(QWidget):
             anno=self.spin_anno.value(),
             livello=self.combo_livello.currentData(),
             totale_elementi_retributivi=self.spin_totale_elementi.value(),
+            comune_residenza=self.combo_comune.currentData(),
             ore_ordinarie=self.spin_ore_ordinarie.value(),
             straordinari=self.spin_straordinari.value(),
             fringe_benefit=self.spin_fringe_benefit.value(),

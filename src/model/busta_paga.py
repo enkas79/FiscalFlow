@@ -22,6 +22,11 @@ class BustaPaga:
 
     # Paga base + contingenza + scatti di anzianità + superminimo, ecc.
     totale_elementi_retributivi: float
+
+    # Comune di residenza fiscale del dipendente, usato per calcolare automaticamente
+    # le addizionali regionale/comunale dovute in sede di proiezione di fine anno.
+    comune_residenza: str = ""
+
     ore_ordinarie: float = 0.0
     straordinari: float = 0.0
     fringe_benefit: float = 0.0

@@ -29,6 +29,7 @@ class PannelloProiezioneConguaglio(QGroupBox):
         self.etichetta_tasse_pagate = self._crea_valore()
         self.etichetta_conguaglio = self._crea_valore(font_grande=True)
         self.etichetta_esito = self._crea_valore(font_grande=True)
+        self.etichetta_territorio = self._crea_valore()
 
         layout.addWidget(QLabel("RAL stimata:"), 0, 0)
         layout.addWidget(self.etichetta_ral, 0, 1)
@@ -44,6 +45,9 @@ class PannelloProiezioneConguaglio(QGroupBox):
         layout.addWidget(self.etichetta_conguaglio, 2, 1)
         layout.addWidget(QLabel("Esito:"), 2, 2)
         layout.addWidget(self.etichetta_esito, 2, 3)
+
+        layout.addWidget(QLabel("Addizionali calcolate su:"), 3, 0)
+        layout.addWidget(self.etichetta_territorio, 3, 1, 1, 3)
 
     @staticmethod
     def _crea_valore(font_grande: bool = False) -> QLabel:
@@ -62,6 +66,11 @@ class PannelloProiezioneConguaglio(QGroupBox):
         self.etichetta_tasse_pagate.setText(f"{risultato.totale_tasse_pagate:,.2f} €")
         self.etichetta_conguaglio.setText(f"{risultato.conguaglio:,.2f} €")
         self.etichetta_esito.setText(risultato.esito)
+        self.etichetta_territorio.setText(
+            f"{risultato.comune_utilizzato} ({risultato.regione_utilizzata}) — "
+            f"regionale {risultato.addizionale_regionale_dovuta:,.2f} € · "
+            f"comunale {risultato.addizionale_comunale_dovuta:,.2f} €"
+        )
 
         colore = (
             "#c0392b"
