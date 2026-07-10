@@ -1,20 +1,27 @@
 """
 Autore: Enrico Martini
 Versione: 0.0.1
-Descrizione: Form di inserimento dati per una singola busta paga mensile, con validazione
-             tramite widget PyQt6 dedicati (QComboBox, QDoubleSpinBox, QSpinBox).
+Descrizione: Form di inserimento dati per una singola busta paga mensile. I campi vengono
+             compilati automaticamente caricando il PDF del cedolino (tramite Gemini) e
+             restano modificabili con i widget PyQt6 dedicati per una verifica prima
+             della conferma (QComboBox, QDoubleSpinBox, QSpinBox).
 """
 
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QGroupBox,
+    QLabel,
+    QMessageBox,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -24,6 +31,7 @@ from PyQt6.QtWidgets import (
 from ..model import config
 from ..model.busta_paga import BustaPaga
 from ..model.enums import LivelloCCNL, Mese
+from ..model.importatore_pdf import ErroreImportazionePdf, ImportatorePdfBustaPaga
 
 
 class FormInserimentoBustaPaga(QWidget):
@@ -37,6 +45,17 @@ class FormInserimentoBustaPaga(QWidget):
 
     def _costruisci_widget(self) -> None:
         gruppo = QGroupBox("Inserimento Busta Paga", self)
+
+        self.pulsante_carica_pdf = QPushButton("Carica da PDF cedolino…", self)
+        self.pulsante_carica_pdf.clicked.connect(self._gestisci_click_carica_pdf)
+
+        etichetta_carica_pdf = QLabel(
+            "Carica il PDF del cedolino per compilare automaticamente i campi sottostanti; "
+            "verificali e premi \"Aggiungi busta paga\" per confermare.",
+            self,
+        )
+        etichetta_carica_pdf.setWordWrap(True)
+
         form_layout = QFormLayout()
 
         self.combo_mese = QComboBox(self)
@@ -87,6 +106,8 @@ class FormInserimentoBustaPaga(QWidget):
         self.pulsante_aggiungi.clicked.connect(self._gestisci_click_aggiungi)
 
         layout_gruppo = QVBoxLayout(gruppo)
+        layout_gruppo.addWidget(self.pulsante_carica_pdf)
+        layout_gruppo.addWidget(etichetta_carica_pdf)
         layout_gruppo.addLayout(form_layout)
         layout_gruppo.addWidget(self.pulsante_aggiungi)
 
@@ -114,6 +135,65 @@ class FormInserimentoBustaPaga(QWidget):
         busta = self.leggi_busta_paga()
         self.busta_paga_inserita.emit(busta)
         self.pulisci_campi()
+
+    def _gestisci_click_carica_pdf(self) -> None:
+        percorso_scelto, _ = QFileDialog.getOpenFileName(
+            self, "Seleziona il PDF del cedolino", "", "File PDF (*.pdf)"
+        )
+        if not percorso_scelto:
+            return
+
+        self.pulsante_carica_pdf.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            busta = ImportatorePdfBustaPaga().estrai_busta_paga(Path(percorso_scelto))
+        except ErroreImportazionePdf as errore:
+            QMessageBox.critical(self, "Importazione da PDF fallita", str(errore))
+            return
+        finally:
+            QApplication.restoreOverrideCursor()
+            self.pulsante_carica_pdf.setEnabled(True)
+
+        self.imposta_valori(busta)
+        QMessageBox.information(
+            self,
+            "Dati importati dal PDF",
+            "I campi sono stati compilati automaticamente dal cedolino. Verifica i valori e "
+            "premi \"Aggiungi busta paga\" per confermare.",
+        )
+
+    def imposta_valori(self, busta: BustaPaga) -> None:
+        """Compila i widget del form con i valori della busta paga indicata (es. da PDF)."""
+        self._imposta_combo_per_dato(self.combo_mese, busta.mese)
+        self.spin_anno.setValue(busta.anno)
+        self._imposta_combo_per_dato(self.combo_livello, busta.livello)
+        self._imposta_combo_comune(busta.comune_residenza)
+        self.spin_totale_elementi.setValue(busta.totale_elementi_retributivi)
+        self.spin_ore_ordinarie.setValue(busta.ore_ordinarie)
+        self.spin_straordinari.setValue(busta.straordinari)
+        self.spin_fringe_benefit.setValue(busta.fringe_benefit)
+        self.spin_contributi_inps.setValue(busta.contributi_inps_dipendente)
+        self.spin_contributi_cometa_dip.setValue(busta.contributi_cometa_dipendente)
+        self.spin_contributi_cometa_azi.setValue(busta.contributi_cometa_azienda)
+        self.spin_irpef_pagata.setValue(busta.irpef_pagata)
+        self.spin_add_regionale.setValue(busta.addizionale_regionale_pagata)
+        self.spin_add_comunale.setValue(busta.addizionale_comunale_pagata)
+        self.spin_conguaglio_730.setValue(busta.conguaglio_730)
+
+    @staticmethod
+    def _imposta_combo_per_dato(combo: QComboBox, valore: object) -> None:
+        indice = combo.findData(valore)
+        if indice >= 0:
+            combo.setCurrentIndex(indice)
+
+    def _imposta_combo_comune(self, comune: str) -> None:
+        if not comune:
+            return
+        indice = self.combo_comune.findData(comune)
+        if indice < 0:
+            self.combo_comune.addItem(comune, userData=comune)
+            indice = self.combo_comune.findData(comune)
+        self.combo_comune.setCurrentIndex(indice)
 
     def leggi_busta_paga(self) -> BustaPaga:
         """Costruisce l'oggetto BustaPaga a partire dai valori correnti dei widget."""
