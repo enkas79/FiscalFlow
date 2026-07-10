@@ -51,9 +51,10 @@ class FormInserimentoBustaPaga(QWidget):
         self.pulsante_carica_pdf.clicked.connect(self._gestisci_click_carica_pdf)
 
         etichetta_carica_pdf = QLabel(
-            "Carica il PDF del cedolino per compilare automaticamente i campi sottostanti "
-            "(lettura locale, nessun dato lascia il computer); verificali e premi "
-            "\"Aggiungi busta paga\" per confermare.",
+            "Carica uno o più PDF di cedolino (lettura locale, nessun dato lascia il computer). "
+            "Con un solo file i campi sottostanti si compilano per la verifica prima di premere "
+            "\"Aggiungi busta paga\"; selezionandone più di uno, dopo conferma vengono aggiunte "
+            "tutte insieme.",
             self,
         )
         etichetta_carica_pdf.setWordWrap(True)
@@ -72,9 +73,17 @@ class FormInserimentoBustaPaga(QWidget):
         for livello in LivelloCCNL:
             self.combo_livello.addItem(livello.value, userData=livello)
 
+        # Editabile: l'elenco predefinito copre solo alcuni comuni capoluogo, ma il comune di
+        # residenza fiscale può essere uno qualsiasi. Le voci elencate sono un suggerimento
+        # rapido, non un vincolo: si può digitare liberamente un comune non presente in elenco.
         self.combo_comune = QComboBox(self)
+        self.combo_comune.setEditable(True)
+        self.combo_comune.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.combo_comune.lineEdit().setPlaceholderText("Digita il tuo comune, es. Loria")
         for comune in config.get_comuni_disponibili():
             self.combo_comune.addItem(comune, userData=comune)
+        self.combo_comune.setCurrentIndex(-1)
+        self.combo_comune.setCurrentText("")
 
         self.spin_totale_elementi = self._crea_spin_valuta()
         self.spin_ore_ordinarie = self._crea_spin_ore()
@@ -141,16 +150,22 @@ class FormInserimentoBustaPaga(QWidget):
         self.pulisci_campi()
 
     def _gestisci_click_carica_pdf(self) -> None:
-        percorso_scelto, _ = QFileDialog.getOpenFileName(
-            self, "Seleziona il PDF del cedolino", "", "File PDF (*.pdf)"
+        percorsi_scelti, _ = QFileDialog.getOpenFileNames(
+            self, "Seleziona uno o più PDF di cedolino", "", "File PDF (*.pdf)"
         )
-        if not percorso_scelto:
+        if not percorsi_scelti:
             return
 
+        if len(percorsi_scelti) == 1:
+            self._importa_pdf_singolo(Path(percorsi_scelti[0]))
+        else:
+            self._importa_pdf_multipli([Path(p) for p in percorsi_scelti])
+
+    def _importa_pdf_singolo(self, percorso: Path) -> None:
         self.pulsante_carica_pdf.setEnabled(False)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            busta = ImportatorePdfBustaPaga().estrai_busta_paga(Path(percorso_scelto))
+            busta = ImportatorePdfBustaPaga().estrai_busta_paga(percorso)
         except ErroreImportazionePdf as errore:
             QMessageBox.critical(self, "Importazione da PDF fallita", str(errore))
             return
@@ -165,6 +180,45 @@ class FormInserimentoBustaPaga(QWidget):
             "I campi sono stati compilati automaticamente dal cedolino. Verifica i valori e "
             "premi \"Aggiungi busta paga\" per confermare.",
         )
+
+    def _importa_pdf_multipli(self, percorsi: list[Path]) -> None:
+        self.pulsante_carica_pdf.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            importate, errori = ImportatorePdfBustaPaga().estrai_buste_paga(percorsi)
+        finally:
+            QApplication.restoreOverrideCursor()
+            self.pulsante_carica_pdf.setEnabled(True)
+
+        if not importate:
+            dettaglio = "\n".join(f"- {percorso.name}: {messaggio}" for percorso, messaggio in errori)
+            QMessageBox.critical(
+                self,
+                "Importazione da PDF fallita",
+                f"Nessuno dei {len(percorsi)} PDF selezionati è stato riconosciuto:\n\n{dettaglio}",
+            )
+            return
+
+        righe_riepilogo = "\n".join(f"- {busta.mese.nome_italiano} {busta.anno}" for busta in importate)
+        messaggio = f"Verranno aggiunte {len(importate)} buste paga:\n\n{righe_riepilogo}"
+        if errori:
+            dettaglio_errori = "\n".join(f"- {percorso.name}: {msg}" for percorso, msg in errori)
+            messaggio += (
+                f"\n\n{len(errori)} file non riconosciuti (da inserire manualmente):\n{dettaglio_errori}"
+            )
+        messaggio += "\n\nConfermi l'inserimento?"
+
+        risposta = QMessageBox.question(
+            self,
+            "Conferma importazione multipla",
+            messaggio,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if risposta != QMessageBox.StandardButton.Yes:
+            return
+
+        for busta in importate:
+            self.busta_paga_inserita.emit(busta)
 
     def imposta_valori(self, busta: BustaPaga) -> None:
         """Compila i widget del form con i valori della busta paga indicata (es. da PDF)."""
@@ -192,13 +246,8 @@ class FormInserimentoBustaPaga(QWidget):
             combo.setCurrentIndex(indice)
 
     def _imposta_combo_comune(self, comune: str) -> None:
-        if not comune:
-            return
-        indice = self.combo_comune.findData(comune)
-        if indice < 0:
-            self.combo_comune.addItem(comune, userData=comune)
-            indice = self.combo_comune.findData(comune)
-        self.combo_comune.setCurrentIndex(indice)
+        if comune:
+            self.combo_comune.setCurrentText(comune)
 
     def leggi_busta_paga(self) -> BustaPaga:
         """Costruisce l'oggetto BustaPaga a partire dai valori correnti dei widget."""
@@ -207,7 +256,7 @@ class FormInserimentoBustaPaga(QWidget):
             anno=self.spin_anno.value(),
             livello=self.combo_livello.currentData(),
             totale_elementi_retributivi=self.spin_totale_elementi.value(),
-            comune_residenza=self.combo_comune.currentData(),
+            comune_residenza=self.combo_comune.currentText().strip(),
             ore_ordinarie=self.spin_ore_ordinarie.value(),
             straordinari=self.spin_straordinari.value(),
             fringe_benefit=self.spin_fringe_benefit.value(),

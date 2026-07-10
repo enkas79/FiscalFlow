@@ -130,3 +130,48 @@ def test_estrai_busta_paga_solleva_errore_su_campi_obbligatori_mancanti(tmp_path
 def test_cerca_livello_ignora_falsi_positivi_lontani_dall_etichetta() -> None:
     testo = "Riferimento pratica A1B2. Livello CCNL: D2. Comune: Torino."
     assert ImportatorePdfBustaPaga._cerca_livello(testo) == LivelloCCNL.D2
+
+
+def test_somma_righe_aggrega_piu_rate_della_stessa_voce() -> None:
+    # Caso reale: l'addizionale comunale può comparire su più righe nello stesso mese
+    # (saldo anno precedente + acconto anno corrente) e vanno sommate, non solo la prima.
+    testo = (
+        "002    Addizionale comunale         2025       8,25        66,06                    8,25\n"
+        "002    Addizionale comunale         2026       3,88        31,07                    3,88\n"
+    )
+    dati = ImportatorePdfBustaPaga._estrai_dati_da_testo(testo + "Livello: C3\nMarzo 2026\n2000,00")
+    assert dati["addizionale_comunale_pagata"] == 12.13
+
+
+def test_numero_a_quattro_cifre_senza_punto_delle_migliaia_non_si_spezza() -> None:
+    # Regressione: "2158,26" non deve essere interpretato come "215" + "8,26".
+    riga = "F39    COMETA             -c/DIP            2158,26        1,200                   25,90"
+    dati = ImportatorePdfBustaPaga._estrai_dati_da_testo(riga + "\nLivello: C3\nMarzo 2026\n2000,00")
+    assert dati["contributi_cometa_dipendente"] == 25.90
+
+
+def test_numero_con_tre_decimali_viene_interpretato_correttamente() -> None:
+    # Regressione: "43,170" deve valere 43.17, non spezzarsi in "43,17" + "0".
+    riga = "F40    COMETA             -c/AZI            2158,26       43,170"
+    dati = ImportatorePdfBustaPaga._estrai_dati_da_testo(riga + "\nLivello: C3\nMarzo 2026\n2000,00")
+    assert dati["contributi_cometa_azienda"] == 43.17
+
+
+def test_estrai_buste_paga_multiplo_separa_riuscite_e_fallite(tmp_path: Path) -> None:
+    percorso_valido = tmp_path / "cedolino_marzo.pdf"
+    _crea_pdf_di_prova(percorso_valido, _TESTO_CEDOLINO_ESEMPIO.strip().splitlines())
+
+    testo_febbraio = _TESTO_CEDOLINO_ESEMPIO.replace("Marzo 2026", "Febbraio 2026")
+    percorso_valido_2 = tmp_path / "cedolino_febbraio.pdf"
+    _crea_pdf_di_prova(percorso_valido_2, testo_febbraio.strip().splitlines())
+
+    percorso_non_valido = tmp_path / "documento_estraneo.pdf"
+    _crea_pdf_di_prova(percorso_non_valido, ["Documento senza i dati richiesti dal cedolino."])
+
+    importate, errori = ImportatorePdfBustaPaga().estrai_buste_paga(
+        [percorso_valido, percorso_valido_2, percorso_non_valido]
+    )
+
+    assert [b.mese for b in importate] == [Mese.FEBBRAIO, Mese.MARZO]
+    assert len(errori) == 1
+    assert errori[0][0] == percorso_non_valido
