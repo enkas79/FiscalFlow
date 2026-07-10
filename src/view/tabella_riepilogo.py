@@ -8,7 +8,7 @@ Descrizione: Tabella riassuntiva delle buste paga inserite con i relativi progre
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QAbstractItemView, QTableWidget, QTableWidgetItem, QWidget
+from PyQt6.QtWidgets import QAbstractItemView, QHeaderView, QTableWidget, QTableWidgetItem, QWidget
 
 from ..model.archivio import RigaProgressivo
 
@@ -32,7 +32,9 @@ class TabellaRiepilogoBustePaga(QTableWidget):
         self.setHorizontalHeaderLabels(INTESTAZIONI)
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.horizontalHeader().setStretchLastSection(True)
+        # Ogni colonna si adatta alla larghezza del proprio contenuto più lungo (intestazione
+        # compresa) invece di avere una larghezza fissa o di stirare solo l'ultima colonna.
+        self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
 
     def aggiorna_righe(self, righe_progressivo: list[RigaProgressivo]) -> None:
         """Ripopola la tabella con le righe di progressivo fornite dal controller."""
