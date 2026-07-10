@@ -1,0 +1,115 @@
+# Autore: Enrico Martini
+# Versione: 0.0.1
+# Descrizione: Ad ogni incremento di VERSION.txt su main, genera con PyInstaller un
+#              installer per Windows, Ubuntu e macOS e pubblica una GitHub Release con
+#              il numero di versione preso da VERSION.txt (stessa versione incorporata
+#              nei metadati di ciascun pacchetto).
+
+name: Build Installer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - VERSION.txt
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.nome_pacchetto }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            nome_pacchetto: windows
+          - os: ubuntu-latest
+            nome_pacchetto: ubuntu
+          - os: macos-latest
+            nome_pacchetto: macos
+
+    steps:
+      - name: Checkout del repository
+        uses: actions/checkout@v4
+
+      - name: Imposta Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Legge la versione da VERSION.txt
+        id: versione
+        shell: bash
+        run: echo "numero=$(tr -d '[:space:]' < VERSION.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Installa le dipendenze di build
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Genera le informazioni di versione per Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: python scripts/genera_version_info_windows.py "${{ steps.versione.outputs.numero }}"
+
+      - name: Costruisce l'applicazione con PyInstaller
+        shell: bash
+        run: pyinstaller fiscalflow.spec --noconfirm --clean
+
+      - name: Impacchetta l'installer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist/FiscalFlow/*" -DestinationPath "FiscalFlow-${{ steps.versione.outputs.numero }}-windows.zip"
+
+      - name: Impacchetta l'installer (Ubuntu)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: tar -czf "FiscalFlow-${{ steps.versione.outputs.numero }}-ubuntu.tar.gz" -C dist FiscalFlow
+
+      - name: Impacchetta l'installer (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          cd dist
+          zip -r "../FiscalFlow-${{ steps.versione.outputs.numero }}-macos.zip" FiscalFlow.app
+
+      - name: Carica l'artefatto dell'installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.nome_pacchetto }}
+          path: FiscalFlow-${{ steps.versione.outputs.numero }}-*
+          if-no-files-found: error
+
+  release:
+    name: Pubblica la release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repository
+        uses: actions/checkout@v4
+
+      - name: Legge la versione da VERSION.txt
+        id: versione
+        run: echo "numero=$(tr -d '[:space:]' < VERSION.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Scarica tutti gli installer generati
+        uses: actions/download-artifact@v4
+        with:
+          path: installer
+          pattern: installer-*
+          merge-multiple: true
+
+      - name: Pubblica la GitHub Release con gli installer allegati
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.versione.outputs.numero }}
+          name: FiscalFlow v${{ steps.versione.outputs.numero }}
+          files: installer/FiscalFlow-${{ steps.versione.outputs.numero }}-*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

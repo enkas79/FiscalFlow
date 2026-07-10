@@ -10,6 +10,7 @@ from __future__ import annotations
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QMainWindow, QSplitter, QVBoxLayout, QWidget
 
+from ..versione import get_versione
 from .form_inserimento import FormInserimentoBustaPaga
 from .pannello_proiezione import PannelloProiezioneConguaglio
 from .tabella_riepilogo import TabellaRiepilogoBustePaga
@@ -20,7 +21,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("FiscalFlow - Proiezione Fiscale Buste Paga")
+        self.setWindowTitle(f"FiscalFlow v{get_versione()} - Proiezione Fiscale Buste Paga")
         self.resize(1200, 800)
 
         self.form_inserimento = FormInserimentoBustaPaga(self)
