@@ -117,3 +117,60 @@ def test_proiezione_senza_buste_e_neutra() -> None:
     risultato = CalcolatoreFiscale.calcola_proiezione_fine_anno([])
     assert risultato.ral_stimata == 0.0
     assert risultato.esito == "PARI"
+
+
+def test_progressivo_tfr_maturato_somma_le_quote_mensili() -> None:
+    buste = [
+        BustaPaga(
+            mese=Mese(m),
+            anno=2026,
+            livello=LivelloCCNL.C3,
+            totale_elementi_retributivi=2_000.0,
+            quota_tfr_maturata=153.85,
+        )
+        for m in range(1, 4)
+    ]
+    assert CalcolatoreFiscale.calcola_progressivo_tfr_maturato(buste) == round(153.85 * 3, 2)
+
+
+def test_prospetto_annuale_senza_buste_e_neutro() -> None:
+    prospetto = CalcolatoreFiscale.calcola_prospetto_annuale([])
+    assert prospetto.numero_mesi_inseriti == 0
+    assert prospetto.totale_tasse_pagate == 0.0
+    assert prospetto.aliquota_media_effettiva == 0.0
+
+
+def test_prospetto_annuale_aggrega_tasse_tfr_cometa_e_trattenute() -> None:
+    buste = [
+        BustaPaga(
+            mese=Mese(m),
+            anno=2026,
+            livello=LivelloCCNL.C3,
+            totale_elementi_retributivi=2_000.0,
+            comune_residenza="Milano",
+            contributi_inps_dipendente=200.0,
+            contributi_cometa_dipendente=20.0,
+            contributi_cometa_azienda=30.0,
+            irpef_pagata=300.0,
+            addizionale_regionale_pagata=20.0,
+            addizionale_comunale_pagata=10.0,
+            quota_tfr_maturata=153.85,
+        )
+        for m in range(1, 3)
+    ]
+
+    prospetto = CalcolatoreFiscale.calcola_prospetto_annuale(buste)
+
+    assert prospetto.anno == 2026
+    assert prospetto.numero_mesi_inseriti == 2
+    assert prospetto.retribuzione_lorda_totale == 4_000.0
+    assert prospetto.totale_tasse_pagate == round((300.0 + 20.0 + 10.0) * 2, 2)
+    assert prospetto.tfr_maturato_totale == round(153.85 * 2, 2)
+    assert prospetto.totale_cometa_complessivo == round((20.0 + 30.0) * 2, 2)
+    assert prospetto.trattenute_totali == round((200.0 + 20.0 + 330.0) * 2, 2)
+    assert prospetto.aliquota_media_effettiva == round(
+        prospetto.totale_tasse_pagate / prospetto.imponibile_fiscale_totale * 100, 2
+    )
+    assert prospetto.incidenza_trattenute_su_lordo == round(
+        prospetto.trattenute_totali / prospetto.retribuzione_lorda_totale * 100, 2
+    )

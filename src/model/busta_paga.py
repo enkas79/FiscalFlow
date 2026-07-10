@@ -43,6 +43,9 @@ class BustaPaga:
     # dipendente, negativo = trattenuta.
     conguaglio_730: float = 0.0
 
+    # Quota di TFR maturata nel mese (accantonamento, non erogata in busta).
+    quota_tfr_maturata: float = 0.0
+
     @property
     def retribuzione_lorda(self) -> float:
         """Retribuzione lorda del mese (elementi fissi contrattuali + straordinari)."""

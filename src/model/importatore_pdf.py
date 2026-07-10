@@ -2,53 +2,61 @@
 Autore: Enrico Martini
 Versione: 0.0.1
 Descrizione: Importatore che estrae automaticamente i dati di una busta paga da un file PDF
-             (cedolino) tramite l'API multimodale di Gemini (google-genai), restituendo
-             direttamente un oggetto BustaPaga pronto per l'inserimento in archivio.
+             di cedolino letto interamente in locale: il testo viene estratto con pypdf e i
+             valori numerici vengono riconosciuti tramite espressioni regolari sulle diciture
+             più comuni dei cedolini italiani. Nessun dato lascia il computer dell'utente: non
+             serve alcuna connessione di rete né una API key.
 """
 
 from __future__ import annotations
 
-import json
-import os
+import re
 from pathlib import Path
+from typing import Sequence
 
-from google import genai
-from google.genai import types
+from pypdf import PdfReader
 
 from .busta_paga import BustaPaga
 from .enums import LivelloCCNL, Mese
 
-_MODELLO_GEMINI: str = "gemini-2.5-flash"
+# Importo in formato italiano: migliaia con punto, decimali con virgola (es. "1.234,56"),
+# oppure senza separatore delle migliaia (es. "234,56" o "234"); parentesi o "-" per il segno.
+_NUMERO: str = r"-?\(?\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?\)?|-?\(?\d+(?:,\d{1,2})?\)?"
 
-_PROMPT_ESTRAZIONE: str = (
-    "Analizza il cedolino paga (busta paga italiana) allegato in formato PDF ed estrai i dati "
-    "richiesti dallo schema JSON fornito, leggendoli esattamente come riportati nel documento. "
-    "Usa 0 per gli importi non presenti o non applicabili nel cedolino. "
-    f"Il livello di inquadramento CCNL deve essere uno tra: {', '.join(l.value for l in LivelloCCNL)}. "
-    "Il mese di competenza va espresso come numero da 1 (gennaio) a 12 (dicembre)."
-)
-
-_SCHEMA_RISPOSTA: dict = {
-    "type": "object",
-    "properties": {
-        "mese": {"type": "integer", "minimum": 1, "maximum": 12},
-        "anno": {"type": "integer"},
-        "livello": {"type": "string", "enum": [livello.value for livello in LivelloCCNL]},
-        "comune_residenza": {"type": "string"},
-        "totale_elementi_retributivi": {"type": "number"},
-        "ore_ordinarie": {"type": "number"},
-        "straordinari": {"type": "number"},
-        "fringe_benefit": {"type": "number"},
-        "contributi_inps_dipendente": {"type": "number"},
-        "contributi_cometa_dipendente": {"type": "number"},
-        "contributi_cometa_azienda": {"type": "number"},
-        "irpef_pagata": {"type": "number"},
-        "addizionale_regionale_pagata": {"type": "number"},
-        "addizionale_comunale_pagata": {"type": "number"},
-        "conguaglio_730": {"type": "number"},
-    },
-    "required": ["mese", "anno", "livello", "totale_elementi_retributivi"],
+_ETICHETTE_CAMPI: dict[str, tuple[str, ...]] = {
+    "totale_elementi_retributivi": (
+        "totale competenze",
+        "totale elementi retributivi",
+        "totale retribuzione",
+        "retribuzione lorda",
+    ),
+    "ore_ordinarie": ("ore ordinarie", "ore lavorate", "ore mensili"),
+    "straordinari": ("straordinari", "lavoro straordinario", "ore straordinarie"),
+    "fringe_benefit": ("fringe benefit", "benefit aziendali", "welfare aziendale"),
+    "contributi_inps_dipendente": (
+        "contributi inps",
+        "trattenute inps",
+        "contr\\. inps dip",
+        "inps dipendente",
+    ),
+    "contributi_cometa_dipendente": (
+        "cometa dipendente",
+        "fondo cometa dip",
+        "previdenza complementare dip",
+    ),
+    "contributi_cometa_azienda": (
+        "cometa azienda",
+        "fondo cometa azi",
+        "previdenza complementare azi",
+    ),
+    "irpef_pagata": ("irpef", "ritenute irpef", "imposta netta"),
+    "addizionale_regionale_pagata": ("addizionale regionale", "add\\. region", "add\\.reg"),
+    "addizionale_comunale_pagata": ("addizionale comunale", "add\\. comun", "add\\.com"),
+    "conguaglio_730": ("conguaglio 730", "conguaglio fiscale", "mod\\. 730"),
+    "quota_tfr_maturata": ("tfr maturato", "accantonamento tfr", "quota tfr", "t\\.f\\.r\\."),
 }
+
+_CAMPI_OBBLIGATORI: tuple[str, ...] = ("mese", "anno", "livello", "totale_elementi_retributivi")
 
 
 class ErroreImportazionePdf(Exception):
@@ -56,77 +64,120 @@ class ErroreImportazionePdf(Exception):
 
 
 class ImportatorePdfBustaPaga:
-    """Estrae i dati di una busta paga mensile da un PDF di cedolino tramite Gemini."""
-
-    def __init__(self, api_key: str | None = None) -> None:
-        self._api_key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    """Estrae localmente, senza alcuna chiamata di rete, i dati di un cedolino da PDF."""
 
     def estrai_busta_paga(self, percorso_pdf: Path) -> BustaPaga:
         """Legge il PDF del cedolino indicato e restituisce la BustaPaga con i dati estratti."""
-        if not self._api_key:
-            raise ErroreImportazionePdf(
-                "Nessuna API key di Gemini configurata. Imposta la variabile d'ambiente "
-                "GEMINI_API_KEY con una chiave valida per abilitare il caricamento da PDF."
-            )
-
         percorso = Path(percorso_pdf)
         if not percorso.is_file():
             raise ErroreImportazionePdf(f"File PDF non trovato: {percorso}")
 
-        try:
-            contenuto_pdf = percorso.read_bytes()
-        except OSError as errore:
-            raise ErroreImportazionePdf(f"Impossibile leggere il file PDF: {errore}") from errore
+        testo = self._estrai_testo(percorso)
+        if not testo.strip():
+            raise ErroreImportazionePdf(
+                "Impossibile estrarre testo dal PDF: è probabilmente una scansione immagine "
+                "priva di testo selezionabile. Inserisci i dati manualmente."
+            )
 
-        testo_risposta = self._interroga_gemini(contenuto_pdf)
-
-        try:
-            dati = json.loads(testo_risposta)
-        except json.JSONDecodeError as errore:
-            raise ErroreImportazionePdf(f"Risposta del modello non interpretabile: {errore}") from errore
+        dati = self._estrai_dati_da_testo(testo)
+        campi_mancanti = [campo for campo in _CAMPI_OBBLIGATORI if dati.get(campo) is None]
+        if campi_mancanti:
+            raise ErroreImportazionePdf(
+                "Non è stato possibile riconoscere nel PDF i seguenti dati obbligatori: "
+                f"{', '.join(campi_mancanti)}. Inserisci la busta paga manualmente."
+            )
 
         return self._costruisci_busta_paga(dati)
 
-    def _interroga_gemini(self, contenuto_pdf: bytes) -> str:
+    @staticmethod
+    def _estrai_testo(percorso: Path) -> str:
         try:
-            client = genai.Client(api_key=self._api_key)
-            risposta = client.models.generate_content(
-                model=_MODELLO_GEMINI,
-                contents=[
-                    types.Part.from_bytes(data=contenuto_pdf, mime_type="application/pdf"),
-                    _PROMPT_ESTRAZIONE,
-                ],
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=_SCHEMA_RISPOSTA,
-                ),
-            )
-        except Exception as errore:  # le eccezioni della SDK non sono tipizzate in modo stabile
-            raise ErroreImportazionePdf(f"Estrazione dati dal PDF fallita: {errore}") from errore
+            lettore = PdfReader(str(percorso))
+            return "\n".join(pagina.extract_text() or "" for pagina in lettore.pages)
+        except Exception as errore:  # pypdf non espone un'unica eccezione base stabile
+            raise ErroreImportazionePdf(f"Impossibile leggere il file PDF: {errore}") from errore
 
-        testo_risposta = (risposta.text or "").strip()
-        if not testo_risposta:
-            raise ErroreImportazionePdf("Il modello non ha restituito alcun dato dal PDF caricato.")
-        return testo_risposta
+    @classmethod
+    def _estrai_dati_da_testo(cls, testo: str) -> dict[str, object]:
+        dati: dict[str, object] = {
+            "mese": cls._cerca_mese(testo),
+            "anno": cls._cerca_anno(testo),
+            "livello": cls._cerca_livello(testo),
+            "comune_residenza": cls._cerca_comune(testo),
+        }
+        for campo, etichette in _ETICHETTE_CAMPI.items():
+            dati[campo] = cls._cerca_valore(testo, etichette)
+        return dati
 
     @staticmethod
-    def _costruisci_busta_paga(dati: dict) -> BustaPaga:
-        """Converte il dizionario estratto dal modello in un oggetto BustaPaga validato."""
-        try:
-            mese = Mese(int(dati["mese"]))
-            anno = int(dati["anno"])
-            livello = LivelloCCNL(dati["livello"])
-            totale_elementi_retributivi = float(dati["totale_elementi_retributivi"])
-        except (KeyError, ValueError) as errore:
-            raise ErroreImportazionePdf(
-                f"Dati estratti dal PDF incompleti o non validi: {errore}"
-            ) from errore
+    def _cerca_valore(testo: str, etichette: Sequence[str]) -> float | None:
+        for etichetta in etichette:
+            pattern = re.compile(rf"{etichetta}[^\d\-(\n]{{0,25}}({_NUMERO})", re.IGNORECASE)
+            corrispondenza = pattern.search(testo)
+            if corrispondenza:
+                return ImportatorePdfBustaPaga._converti_numero_italiano(corrispondenza.group(1))
+        return None
 
+    @staticmethod
+    def _converti_numero_italiano(testo: str) -> float:
+        grezzo = testo.strip()
+        negativo = grezzo.startswith("-") or (grezzo.startswith("(") and grezzo.endswith(")"))
+        pulito = grezzo.strip("()-").replace("€", "").strip()
+        if "," in pulito:
+            pulito = pulito.replace(".", "").replace(",", ".")
+        valore = float(pulito)
+        return -abs(valore) if negativo else valore
+
+    @staticmethod
+    def _cerca_mese(testo: str) -> Mese | None:
+        nomi_mesi = {mese.nome_italiano.lower(): mese for mese in Mese}
+        corrispondenza = re.search(rf"\b({'|'.join(nomi_mesi)})\b", testo, re.IGNORECASE)
+        if corrispondenza:
+            return nomi_mesi[corrispondenza.group(1).lower()]
+
+        corrispondenza = re.search(r"\b(0[1-9]|1[0-2])[/\-](?:19|20)\d{2}\b", testo)
+        if corrispondenza:
+            return Mese(int(corrispondenza.group(1)))
+        return None
+
+    @staticmethod
+    def _cerca_anno(testo: str) -> int | None:
+        corrispondenza = re.search(r"\b(20\d{2})\b", testo)
+        return int(corrispondenza.group(1)) if corrispondenza else None
+
+    @staticmethod
+    def _cerca_livello(testo: str) -> LivelloCCNL | None:
+        codici = "|".join(livello.value for livello in LivelloCCNL)
+        corrispondenza = re.search(
+            rf"(?:livello|qualifica|categoria|inquadramento)\D{{0,20}}\b({codici})\b",
+            testo,
+            re.IGNORECASE,
+        )
+        if not corrispondenza:
+            corrispondenza = re.search(rf"\b({codici})\b", testo)
+        if not corrispondenza:
+            return None
+        try:
+            return LivelloCCNL(corrispondenza.group(1).upper())
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _cerca_comune(testo: str) -> str:
+        corrispondenza = re.search(
+            r"(?:comune di residenza|residenza fiscale|comune)\s*[:\-]?\s*([A-ZÀ-Ü][A-Za-zà-ü' ]{2,30})",
+            testo,
+            re.IGNORECASE,
+        )
+        return corrispondenza.group(1).strip() if corrispondenza else ""
+
+    @staticmethod
+    def _costruisci_busta_paga(dati: dict[str, object]) -> BustaPaga:
         return BustaPaga(
-            mese=mese,
-            anno=anno,
-            livello=livello,
-            totale_elementi_retributivi=totale_elementi_retributivi,
+            mese=dati["mese"],  # type: ignore[arg-type]
+            anno=int(dati["anno"]),  # type: ignore[arg-type]
+            livello=dati["livello"],  # type: ignore[arg-type]
+            totale_elementi_retributivi=float(dati["totale_elementi_retributivi"]),  # type: ignore[arg-type]
             comune_residenza=str(dati.get("comune_residenza") or ""),
             ore_ordinarie=float(dati.get("ore_ordinarie") or 0.0),
             straordinari=float(dati.get("straordinari") or 0.0),
@@ -138,4 +189,5 @@ class ImportatorePdfBustaPaga:
             addizionale_regionale_pagata=float(dati.get("addizionale_regionale_pagata") or 0.0),
             addizionale_comunale_pagata=float(dati.get("addizionale_comunale_pagata") or 0.0),
             conguaglio_730=float(dati.get("conguaglio_730") or 0.0),
+            quota_tfr_maturata=float(dati.get("quota_tfr_maturata") or 0.0),
         )

@@ -19,6 +19,7 @@ INTESTAZIONI: tuple[str, ...] = (
     "Imp. INPS progr. (€)",
     "Imp. fiscale progr. (€)",
     "Tasse pagate progr. (€)",
+    "TFR maturato progr. (€)",
     "Netto percepito (€)",
 )
 
@@ -45,6 +46,7 @@ class TabellaRiepilogoBustePaga(QTableWidget):
                 f"{riga.imponibile_previdenziale_progressivo:,.2f}",
                 f"{riga.imponibile_fiscale_progressivo:,.2f}",
                 f"{riga.totale_tasse_pagate_progressivo:,.2f}",
+                f"{riga.tfr_maturato_progressivo:,.2f}",
                 f"{busta.netto_percepito:,.2f}",
             )
             for indice_colonna, valore in enumerate(valori):

@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import QMainWindow, QSplitter, QVBoxLayout, QWidget
 from ..versione import get_versione
 from .form_inserimento import FormInserimentoBustaPaga
 from .pannello_proiezione import PannelloProiezioneConguaglio
+from .prospetto_fiscale import PannelloProspettoFiscale
 from .tabella_riepilogo import TabellaRiepilogoBustePaga
 
 
@@ -27,6 +28,7 @@ class MainWindow(QMainWindow):
         self.form_inserimento = FormInserimentoBustaPaga(self)
         self.tabella_riepilogo = TabellaRiepilogoBustePaga(self)
         self.pannello_proiezione = PannelloProiezioneConguaglio(self)
+        self.pannello_prospetto = PannelloProspettoFiscale(self)
 
         self._costruisci_layout()
 
@@ -42,5 +44,6 @@ class MainWindow(QMainWindow):
 
         layout_principale.addWidget(splitter, stretch=1)
         layout_principale.addWidget(self.pannello_proiezione, stretch=0)
+        layout_principale.addWidget(self.pannello_prospetto, stretch=0)
 
         self.setCentralWidget(contenitore_centrale)

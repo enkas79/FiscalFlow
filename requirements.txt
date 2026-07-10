@@ -1,2 +1,2 @@
 PyQt6>=6.7
-google-genai>=0.3
+pypdf>=5.0

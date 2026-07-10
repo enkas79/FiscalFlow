@@ -2,9 +2,10 @@
 Autore: Enrico Martini
 Versione: 0.0.1
 Descrizione: Form di inserimento dati per una singola busta paga mensile. I campi vengono
-             compilati automaticamente caricando il PDF del cedolino (tramite Gemini) e
-             restano modificabili con i widget PyQt6 dedicati per una verifica prima
-             della conferma (QComboBox, QDoubleSpinBox, QSpinBox).
+             compilati automaticamente caricando il PDF del cedolino (lettura interamente
+             locale, nessuna connessione di rete) e restano modificabili con i widget PyQt6
+             dedicati per una verifica prima della conferma (QComboBox, QDoubleSpinBox,
+             QSpinBox).
 """
 
 from __future__ import annotations
@@ -50,8 +51,9 @@ class FormInserimentoBustaPaga(QWidget):
         self.pulsante_carica_pdf.clicked.connect(self._gestisci_click_carica_pdf)
 
         etichetta_carica_pdf = QLabel(
-            "Carica il PDF del cedolino per compilare automaticamente i campi sottostanti; "
-            "verificali e premi \"Aggiungi busta paga\" per confermare.",
+            "Carica il PDF del cedolino per compilare automaticamente i campi sottostanti "
+            "(lettura locale, nessun dato lascia il computer); verificali e premi "
+            "\"Aggiungi busta paga\" per confermare.",
             self,
         )
         etichetta_carica_pdf.setWordWrap(True)
@@ -85,6 +87,7 @@ class FormInserimentoBustaPaga(QWidget):
         self.spin_add_regionale = self._crea_spin_valuta()
         self.spin_add_comunale = self._crea_spin_valuta()
         self.spin_conguaglio_730 = self._crea_spin_valuta(minimo=-99_999.0)
+        self.spin_quota_tfr = self._crea_spin_valuta()
 
         form_layout.addRow("Mese", self.combo_mese)
         form_layout.addRow("Anno", self.spin_anno)
@@ -101,6 +104,7 @@ class FormInserimentoBustaPaga(QWidget):
         form_layout.addRow("Addizionale regionale pagata (€)", self.spin_add_regionale)
         form_layout.addRow("Addizionale comunale pagata (€)", self.spin_add_comunale)
         form_layout.addRow("Conguaglio 730 (€, +rimborso/-trattenuta)", self.spin_conguaglio_730)
+        form_layout.addRow("Quota TFR maturata nel mese (€)", self.spin_quota_tfr)
 
         self.pulsante_aggiungi = QPushButton("Aggiungi busta paga", self)
         self.pulsante_aggiungi.clicked.connect(self._gestisci_click_aggiungi)
@@ -179,6 +183,7 @@ class FormInserimentoBustaPaga(QWidget):
         self.spin_add_regionale.setValue(busta.addizionale_regionale_pagata)
         self.spin_add_comunale.setValue(busta.addizionale_comunale_pagata)
         self.spin_conguaglio_730.setValue(busta.conguaglio_730)
+        self.spin_quota_tfr.setValue(busta.quota_tfr_maturata)
 
     @staticmethod
     def _imposta_combo_per_dato(combo: QComboBox, valore: object) -> None:
@@ -213,6 +218,7 @@ class FormInserimentoBustaPaga(QWidget):
             addizionale_regionale_pagata=self.spin_add_regionale.value(),
             addizionale_comunale_pagata=self.spin_add_comunale.value(),
             conguaglio_730=self.spin_conguaglio_730.value(),
+            quota_tfr_maturata=self.spin_quota_tfr.value(),
         )
 
     def pulisci_campi(self) -> None:

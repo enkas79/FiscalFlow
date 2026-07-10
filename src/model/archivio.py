@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .busta_paga import BustaPaga
-from .calcolatore_fiscale import CalcolatoreFiscale, RisultatoProiezione
+from .calcolatore_fiscale import CalcolatoreFiscale, ProspettoFiscaleAnnuale, RisultatoProiezione
 from .enums import LivelloCCNL, Mese
 
 
@@ -24,6 +24,7 @@ class RigaProgressivo:
     imponibile_previdenziale_progressivo: float
     imponibile_fiscale_progressivo: float
     totale_tasse_pagate_progressivo: float
+    tfr_maturato_progressivo: float
 
 
 class GestoreBustePaga:
@@ -68,6 +69,9 @@ class GestoreBustePaga:
                     totale_tasse_pagate_progressivo=(
                         CalcolatoreFiscale.calcola_progressivo_tasse_pagate(accumulato)
                     ),
+                    tfr_maturato_progressivo=(
+                        CalcolatoreFiscale.calcola_progressivo_tfr_maturato(accumulato)
+                    ),
                 )
             )
         return righe
@@ -83,6 +87,9 @@ class GestoreBustePaga:
             retribuzione_mensile_residua,
             comune_residenza=comune_residenza,
         )
+
+    def calcola_prospetto_annuale(self, anno: int) -> ProspettoFiscaleAnnuale:
+        return CalcolatoreFiscale.calcola_prospetto_annuale(self.get_buste_anno(anno))
 
     def salva_su_file(self, percorso: Path) -> None:
         dati = {

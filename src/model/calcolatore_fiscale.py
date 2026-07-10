@@ -50,6 +50,37 @@ class RisultatoProiezione:
         return "PARI"
 
 
+@dataclass(frozen=True, slots=True)
+class ProspettoFiscaleAnnuale:
+    """
+    Prospetto riepilogativo dei soli mesi consuntivati (dati reali da busta paga, non
+    proiettati): tasse pagate con relativa aliquota media effettiva, TFR maturato,
+    contributi al fondo Cometa, addizionali, trattenute complessive e netto percepito.
+    """
+
+    anno: int
+    numero_mesi_inseriti: int
+    retribuzione_lorda_totale: float
+    imponibile_previdenziale_totale: float
+    imponibile_fiscale_totale: float
+    irpef_pagata_totale: float
+    addizionale_regionale_pagata_totale: float
+    addizionale_comunale_pagata_totale: float
+    totale_tasse_pagate: float
+    # totale_tasse_pagate / imponibile_fiscale_totale, in percentuale.
+    aliquota_media_effettiva: float
+    contributi_inps_dipendente_totale: float
+    contributi_cometa_dipendente_totale: float
+    contributi_cometa_azienda_totale: float
+    totale_cometa_complessivo: float
+    tfr_maturato_totale: float
+    # Somma di contributi INPS dipendente, Cometa dipendente e tasse pagate.
+    trattenute_totali: float
+    netto_percepito_totale: float
+    # trattenute_totali / retribuzione_lorda_totale, in percentuale.
+    incidenza_trattenute_su_lordo: float
+
+
 class CalcolatoreFiscale:
     """Incapsula la logica di calcolo fiscale e previdenziale, priva di stato mutabile."""
 
@@ -72,6 +103,10 @@ class CalcolatoreFiscale:
     @classmethod
     def calcola_progressivo_tasse_pagate(cls, buste: Sequence[BustaPaga]) -> float:
         return round(sum(b.totale_tasse_pagate for b in buste), 2)
+
+    @classmethod
+    def calcola_progressivo_tfr_maturato(cls, buste: Sequence[BustaPaga]) -> float:
+        return round(sum(b.quota_tfr_maturata for b in buste), 2)
 
     # ------------------------------------------------------------------
     # Applicazione generica di scaglioni progressivi (riusata per IRPEF
@@ -311,4 +346,80 @@ class CalcolatoreFiscale:
             totale_tasse_dovute=totale_tasse_dovute,
             totale_tasse_pagate=totale_tasse_pagate,
             conguaglio=conguaglio,
+        )
+
+    # ------------------------------------------------------------------
+    # Prospetto fiscale riepilogativo (dati consuntivati, non proiettati)
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def calcola_prospetto_annuale(cls, buste_consuntivate: Sequence[BustaPaga]) -> ProspettoFiscaleAnnuale:
+        """Aggrega i soli mesi già inseriti in un prospetto fiscale/contributivo unico."""
+        buste = cls.ordina_cronologicamente(buste_consuntivate)
+        if not buste:
+            return ProspettoFiscaleAnnuale(
+                anno=0,
+                numero_mesi_inseriti=0,
+                retribuzione_lorda_totale=0.0,
+                imponibile_previdenziale_totale=0.0,
+                imponibile_fiscale_totale=0.0,
+                irpef_pagata_totale=0.0,
+                addizionale_regionale_pagata_totale=0.0,
+                addizionale_comunale_pagata_totale=0.0,
+                totale_tasse_pagate=0.0,
+                aliquota_media_effettiva=0.0,
+                contributi_inps_dipendente_totale=0.0,
+                contributi_cometa_dipendente_totale=0.0,
+                contributi_cometa_azienda_totale=0.0,
+                totale_cometa_complessivo=0.0,
+                tfr_maturato_totale=0.0,
+                trattenute_totali=0.0,
+                netto_percepito_totale=0.0,
+                incidenza_trattenute_su_lordo=0.0,
+            )
+
+        retribuzione_lorda_totale = round(sum(b.retribuzione_lorda for b in buste), 2)
+        imponibile_fiscale_totale = cls.calcola_progressivo_imponibile_fiscale(buste)
+        totale_tasse_pagate = cls.calcola_progressivo_tasse_pagate(buste)
+        aliquota_media_effettiva = (
+            round(totale_tasse_pagate / imponibile_fiscale_totale * 100, 2)
+            if imponibile_fiscale_totale > 0
+            else 0.0
+        )
+
+        contributi_inps_dipendente_totale = round(sum(b.contributi_inps_dipendente for b in buste), 2)
+        contributi_cometa_dipendente_totale = round(sum(b.contributi_cometa_dipendente for b in buste), 2)
+        contributi_cometa_azienda_totale = round(sum(b.contributi_cometa_azienda for b in buste), 2)
+
+        trattenute_totali = round(
+            contributi_inps_dipendente_totale + contributi_cometa_dipendente_totale + totale_tasse_pagate, 2
+        )
+        netto_percepito_totale = round(sum(b.netto_percepito for b in buste), 2)
+        incidenza_trattenute_su_lordo = (
+            round(trattenute_totali / retribuzione_lorda_totale * 100, 2)
+            if retribuzione_lorda_totale > 0
+            else 0.0
+        )
+
+        return ProspettoFiscaleAnnuale(
+            anno=buste[-1].anno,
+            numero_mesi_inseriti=len(buste),
+            retribuzione_lorda_totale=retribuzione_lorda_totale,
+            imponibile_previdenziale_totale=cls.calcola_progressivo_imponibile_previdenziale(buste),
+            imponibile_fiscale_totale=imponibile_fiscale_totale,
+            irpef_pagata_totale=round(sum(b.irpef_pagata for b in buste), 2),
+            addizionale_regionale_pagata_totale=round(sum(b.addizionale_regionale_pagata for b in buste), 2),
+            addizionale_comunale_pagata_totale=round(sum(b.addizionale_comunale_pagata for b in buste), 2),
+            totale_tasse_pagate=totale_tasse_pagate,
+            aliquota_media_effettiva=aliquota_media_effettiva,
+            contributi_inps_dipendente_totale=contributi_inps_dipendente_totale,
+            contributi_cometa_dipendente_totale=contributi_cometa_dipendente_totale,
+            contributi_cometa_azienda_totale=contributi_cometa_azienda_totale,
+            totale_cometa_complessivo=round(
+                contributi_cometa_dipendente_totale + contributi_cometa_azienda_totale, 2
+            ),
+            tfr_maturato_totale=cls.calcola_progressivo_tfr_maturato(buste),
+            trattenute_totali=trattenute_totali,
+            netto_percepito_totale=netto_percepito_totale,
+            incidenza_trattenute_su_lordo=incidenza_trattenute_su_lordo,
         )

@@ -36,3 +36,6 @@ class MainController:
 
         risultato_proiezione = self._gestore.calcola_proiezione_fine_anno(self._anno_corrente)
         self._finestra.pannello_proiezione.aggiorna_proiezione(risultato_proiezione)
+
+        prospetto = self._gestore.calcola_prospetto_annuale(self._anno_corrente)
+        self._finestra.pannello_prospetto.aggiorna_prospetto(prospetto)
