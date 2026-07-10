@@ -17,10 +17,10 @@ from PyQt6.QtWidgets import (
     QApplication,
     QFileDialog,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -52,12 +52,15 @@ class FormInserimentoBustaPaga(QWidget):
         )
         etichetta_carica_pdf.setWordWrap(True)
 
-        layout_gruppo = QVBoxLayout(gruppo)
-        layout_gruppo.addWidget(self.pulsante_carica_pdf)
-        layout_gruppo.addWidget(etichetta_carica_pdf)
-        layout_gruppo.addStretch(1)
+        # Barra orizzontale compatta (pulsante + spiegazione) invece di un blocco verticale:
+        # occupa poco spazio in alto, lasciando la maggior parte della finestra alla tabella.
+        layout_gruppo = QHBoxLayout(gruppo)
+        layout_gruppo.setSpacing(16)
+        layout_gruppo.addWidget(self.pulsante_carica_pdf, stretch=0)
+        layout_gruppo.addWidget(etichetta_carica_pdf, stretch=1)
 
-        layout_esterno = QVBoxLayout(self)
+        layout_esterno = QHBoxLayout(self)
+        layout_esterno.setContentsMargins(0, 0, 0, 0)
         layout_esterno.addWidget(gruppo)
 
     def _gestisci_click_carica_pdf(self) -> None:

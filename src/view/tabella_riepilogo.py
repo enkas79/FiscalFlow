@@ -32,6 +32,8 @@ class TabellaRiepilogoBustePaga(QTableWidget):
         self.setHorizontalHeaderLabels(INTESTAZIONI)
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.setAlternatingRowColors(True)
+        self.verticalHeader().setVisible(False)
         # Ogni colonna si adatta alla larghezza del proprio contenuto più lungo (intestazione
         # compresa) invece di avere una larghezza fissa o di stirare solo l'ultima colonna.
         self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)

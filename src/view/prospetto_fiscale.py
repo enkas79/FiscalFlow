@@ -23,7 +23,14 @@ class PannelloProspettoFiscale(QGroupBox):
         self._costruisci_widget()
 
     def _costruisci_widget(self) -> None:
+        # Una coppia etichetta/valore per riga (non due affiancate): il pannello convive con
+        # la Proiezione di Fine Anno in metà larghezza della finestra, e con quattro colonne
+        # le etichette più lunghe (es. "Trattenute totali (INPS + Cometa dip. + tasse):")
+        # verrebbero troncate.
         layout = QGridLayout(self)
+        layout.setColumnStretch(1, 1)
+        layout.setHorizontalSpacing(12)
+        layout.setVerticalSpacing(8)
 
         self.etichetta_retribuzione_lorda = self._crea_valore()
         self.etichetta_imponibile_fiscale = self._crea_valore()
@@ -40,47 +47,27 @@ class PannelloProspettoFiscale(QGroupBox):
         self.etichetta_incidenza_trattenute = self._crea_valore()
         self.etichetta_netto_totale = self._crea_valore(font_grande=True)
 
-        riga = 0
-        layout.addWidget(QLabel("Retribuzione lorda totale:"), riga, 0)
-        layout.addWidget(self.etichetta_retribuzione_lorda, riga, 1)
-        layout.addWidget(QLabel("Imponibile fiscale totale:"), riga, 2)
-        layout.addWidget(self.etichetta_imponibile_fiscale, riga, 3)
-
-        riga += 1
-        layout.addWidget(QLabel("Totale tasse pagate:"), riga, 0)
-        layout.addWidget(self.etichetta_tasse_pagate, riga, 1)
-        layout.addWidget(QLabel("Aliquota media effettiva:"), riga, 2)
-        layout.addWidget(self.etichetta_aliquota_media, riga, 3)
-
-        riga += 1
-        layout.addWidget(QLabel("di cui IRPEF:"), riga, 0)
-        layout.addWidget(self.etichetta_irpef, riga, 1)
-        layout.addWidget(QLabel("di cui addizionale regionale:"), riga, 2)
-        layout.addWidget(self.etichetta_add_regionale, riga, 3)
-
-        riga += 1
-        layout.addWidget(QLabel("di cui addizionale comunale:"), riga, 0)
-        layout.addWidget(self.etichetta_add_comunale, riga, 1)
-        layout.addWidget(QLabel("TFR maturato:"), riga, 2)
-        layout.addWidget(self.etichetta_tfr, riga, 3)
-
-        riga += 1
-        layout.addWidget(QLabel("Cometa dipendente:"), riga, 0)
-        layout.addWidget(self.etichetta_cometa_dipendente, riga, 1)
-        layout.addWidget(QLabel("Cometa azienda:"), riga, 2)
-        layout.addWidget(self.etichetta_cometa_azienda, riga, 3)
-
-        riga += 1
-        layout.addWidget(QLabel("Cometa complessivo:"), riga, 0)
-        layout.addWidget(self.etichetta_cometa_totale, riga, 1)
-        layout.addWidget(QLabel("Incidenza trattenute su lordo:"), riga, 2)
-        layout.addWidget(self.etichetta_incidenza_trattenute, riga, 3)
-
-        riga += 1
-        layout.addWidget(QLabel("Trattenute totali (INPS + Cometa dip. + tasse):"), riga, 0)
-        layout.addWidget(self.etichetta_trattenute_totali, riga, 1)
-        layout.addWidget(QLabel("Netto percepito totale:"), riga, 2)
-        layout.addWidget(self.etichetta_netto_totale, riga, 3)
+        righe = (
+            ("Retribuzione lorda totale:", self.etichetta_retribuzione_lorda),
+            ("Imponibile fiscale totale:", self.etichetta_imponibile_fiscale),
+            ("Totale tasse pagate:", self.etichetta_tasse_pagate),
+            ("Aliquota media effettiva:", self.etichetta_aliquota_media),
+            ("di cui IRPEF:", self.etichetta_irpef),
+            ("di cui addizionale regionale:", self.etichetta_add_regionale),
+            ("di cui addizionale comunale:", self.etichetta_add_comunale),
+            ("TFR maturato:", self.etichetta_tfr),
+            ("Cometa dipendente:", self.etichetta_cometa_dipendente),
+            ("Cometa azienda:", self.etichetta_cometa_azienda),
+            ("Cometa complessivo:", self.etichetta_cometa_totale),
+            ("Trattenute totali (INPS + Cometa dip. + tasse):", self.etichetta_trattenute_totali),
+            ("Incidenza trattenute su lordo:", self.etichetta_incidenza_trattenute),
+            ("Netto percepito totale:", self.etichetta_netto_totale),
+        )
+        for indice_riga, (testo_etichetta, valore) in enumerate(righe):
+            etichetta = QLabel(testo_etichetta)
+            etichetta.setWordWrap(True)
+            layout.addWidget(etichetta, indice_riga, 0)
+            layout.addWidget(valore, indice_riga, 1)
 
     @staticmethod
     def _crea_valore(font_grande: bool = False) -> QLabel:

@@ -10,3 +10,11 @@ L'estrazione è euristica: su cedolini con layout molto diversi da quello atteso
 
 ## Prospetto Fiscale
 Il pannello "Prospetto Fiscale" riepiloga i mesi inseriti nell'anno: totale tasse pagate con la relativa aliquota media effettiva, TFR maturato, contributi al fondo Cometa (dipendente, azienda e complessivo), addizionali regionale/comunale, trattenute complessive (INPS + Cometa dipendente + tasse) con la loro incidenza sul lordo, e netto percepito totale.
+
+## Menu e archivio
+La barra dei menù offre:
+- **File**: Salva archivio… / Apri archivio… (esporta e importa tutte le buste paga inserite in un file JSON, per non perdere i dati tra una sessione e l'altra) e Esci.
+- **Aiuto**: Guida (spiega ogni sezione dell'app), Controlla aggiornamenti… e Informazioni su FiscalFlow.
+
+## Controllo aggiornamenti
+All'avvio, e su richiesta da Aiuto → Controlla aggiornamenti, l'app confronta la versione installata con l'ultima release pubblicata su GitHub (in background, senza bloccare l'interfaccia). Se è disponibile una versione più recente viene proposta l'apertura della pagina di download: l'installazione resta manuale, l'eseguibile in uso non viene sostituito automaticamente.

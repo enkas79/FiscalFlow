@@ -10,6 +10,7 @@ from __future__ import annotations
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QGridLayout, QGroupBox, QLabel, QWidget
 
+from ..model import config
 from ..model.calcolatore_fiscale import RisultatoProiezione
 
 
@@ -21,7 +22,13 @@ class PannelloProiezioneConguaglio(QGroupBox):
         self._costruisci_widget()
 
     def _costruisci_widget(self) -> None:
+        # Una coppia etichetta/valore per riga (non due affiancate): il pannello convive con
+        # il Prospetto Fiscale in metà larghezza della finestra, e un valore con più decine di
+        # caratteri (es. "Addizionali calcolate su: ...") verrebbe troncato con quattro colonne.
         layout = QGridLayout(self)
+        layout.setColumnStretch(1, 1)
+        layout.setHorizontalSpacing(12)
+        layout.setVerticalSpacing(8)
 
         self.etichetta_ral = self._crea_valore()
         self.etichetta_tredicesima = self._crea_valore()
@@ -30,24 +37,20 @@ class PannelloProiezioneConguaglio(QGroupBox):
         self.etichetta_conguaglio = self._crea_valore(font_grande=True)
         self.etichetta_esito = self._crea_valore(font_grande=True)
         self.etichetta_territorio = self._crea_valore()
+        self.etichetta_territorio.setWordWrap(True)
 
-        layout.addWidget(QLabel("RAL stimata:"), 0, 0)
-        layout.addWidget(self.etichetta_ral, 0, 1)
-        layout.addWidget(QLabel("Tredicesima stimata:"), 0, 2)
-        layout.addWidget(self.etichetta_tredicesima, 0, 3)
-
-        layout.addWidget(QLabel("Totale tasse dovute:"), 1, 0)
-        layout.addWidget(self.etichetta_tasse_dovute, 1, 1)
-        layout.addWidget(QLabel("Totale tasse pagate:"), 1, 2)
-        layout.addWidget(self.etichetta_tasse_pagate, 1, 3)
-
-        layout.addWidget(QLabel("Conguaglio:"), 2, 0)
-        layout.addWidget(self.etichetta_conguaglio, 2, 1)
-        layout.addWidget(QLabel("Esito:"), 2, 2)
-        layout.addWidget(self.etichetta_esito, 2, 3)
-
-        layout.addWidget(QLabel("Addizionali calcolate su:"), 3, 0)
-        layout.addWidget(self.etichetta_territorio, 3, 1, 1, 3)
+        righe = (
+            ("RAL stimata:", self.etichetta_ral),
+            ("Tredicesima stimata:", self.etichetta_tredicesima),
+            ("Totale tasse dovute:", self.etichetta_tasse_dovute),
+            ("Totale tasse pagate:", self.etichetta_tasse_pagate),
+            ("Conguaglio:", self.etichetta_conguaglio),
+            ("Esito:", self.etichetta_esito),
+            ("Addizionali calcolate su:", self.etichetta_territorio),
+        )
+        for indice_riga, (testo_etichetta, valore) in enumerate(righe):
+            layout.addWidget(QLabel(testo_etichetta), indice_riga, 0)
+            layout.addWidget(valore, indice_riga, 1)
 
     @staticmethod
     def _crea_valore(font_grande: bool = False) -> QLabel:
@@ -66,8 +69,13 @@ class PannelloProiezioneConguaglio(QGroupBox):
         self.etichetta_tasse_pagate.setText(f"{risultato.totale_tasse_pagate:,.2f} €")
         self.etichetta_conguaglio.setText(f"{risultato.conguaglio:,.2f} €")
         self.etichetta_esito.setText(risultato.esito)
+        regione_mostrata = (
+            "aliquota media nazionale"
+            if risultato.regione_utilizzata == config.CHIAVE_FALLBACK
+            else risultato.regione_utilizzata
+        )
         self.etichetta_territorio.setText(
-            f"{risultato.comune_utilizzato} ({risultato.regione_utilizzata}) — "
+            f"{risultato.comune_utilizzato} ({regione_mostrata}) — "
             f"regionale {risultato.addizionale_regionale_dovuta:,.2f} € · "
             f"comunale {risultato.addizionale_comunale_dovuta:,.2f} €"
         )

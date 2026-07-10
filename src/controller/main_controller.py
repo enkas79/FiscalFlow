@@ -2,10 +2,15 @@
 Autore: Enrico Martini
 Versione: 0.0.1
 Descrizione: Controller applicativo che collega gli eventi della View al Model,
-             orchestrando l'inserimento delle buste paga e l'aggiornamento dei calcoli.
+             orchestrando l'inserimento delle buste paga, il salvataggio/apertura
+             dell'archivio e l'aggiornamento dei calcoli.
 """
 
 from __future__ import annotations
+
+from pathlib import Path
+
+from PyQt6.QtWidgets import QMessageBox
 
 from ..model.archivio import GestoreBustePaga
 from ..model.busta_paga import BustaPaga
@@ -21,10 +26,31 @@ class MainController:
         self._anno_corrente: int | None = None
 
         self._finestra.form_inserimento.busta_paga_inserita.connect(self._gestisci_nuova_busta_paga)
+        self._finestra.richiesta_salvataggio_archivio.connect(self._gestisci_salvataggio_archivio)
+        self._finestra.richiesta_apertura_archivio.connect(self._gestisci_apertura_archivio)
 
     def _gestisci_nuova_busta_paga(self, busta: BustaPaga) -> None:
         self._gestore.aggiungi_busta_paga(busta)
         self._anno_corrente = busta.anno
+        self._aggiorna_vista()
+
+    def _gestisci_salvataggio_archivio(self, percorso: Path) -> None:
+        try:
+            self._gestore.salva_su_file(percorso)
+        except OSError as errore:
+            QMessageBox.critical(self._finestra, "Salvataggio fallito", f"Impossibile salvare l'archivio: {errore}")
+            return
+        QMessageBox.information(self._finestra, "Archivio salvato", f"Archivio salvato in:\n{percorso}")
+
+    def _gestisci_apertura_archivio(self, percorso: Path) -> None:
+        try:
+            self._gestore.carica_da_file(percorso)
+        except (OSError, ValueError, KeyError, TypeError) as errore:
+            QMessageBox.critical(self._finestra, "Apertura fallita", f"Impossibile aprire l'archivio: {errore}")
+            return
+
+        anni_disponibili = self._gestore.get_anni_disponibili()
+        self._anno_corrente = max(anni_disponibili) if anni_disponibili else None
         self._aggiorna_vista()
 
     def _aggiorna_vista(self) -> None:
